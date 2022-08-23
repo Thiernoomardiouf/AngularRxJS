@@ -20,6 +20,7 @@
           class="form-control"
           [(ngModel)]="hotelFilter"
           placeholder="rechercher"
+          (ngModelChange)="filterChange($event)"
         />
         <!-- <input type="text" class="form-control" [ngModel]="hotelFilter" (ngModelChange)="hotelFilter = $event"/> -->
       </div>
@@ -29,7 +30,7 @@
     {{ receivedRating }}
   </div>
   <div class="row row-cols-1 row-cols-md-3">
-    <div class="col mb-4" *ngFor="let hotel of filteredHotels">
+    <div class="col mb-4" *ngFor="let hotel of (filteredHotels$ | async)">
       <div class="card">
         <img
           [src]="hotel.imageUrl"
@@ -38,7 +39,7 @@
           class="card-img-top"
         />
         <div class="card-body">
-          <h5 class="card-title">{{ hotel.hotelName | titlecase }}</h5>
+          <h5 class="card-title">{{ hotel.hotelName | titlecase }} - {{hotel.category}}</h5>
 
           <p class="card-text">
             {{ hotel.description }}

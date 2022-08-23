@@ -1,22 +1,31 @@
-import { Component, OnInit } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { BehaviorSubject, combineLatest, EMPTY, Observable, of, Subject, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { IHotel } from '../shared/models/hotel';
 import { HotelListService } from '../shared/services/hotel-list.service';
 
 @Component({
   selector: 'app-hotel-list',
   templateUrl: './hotel-list.component.html',
-  styleUrls: ['./hotel-list.component.css']
+  styleUrls: ['./hotel-list.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class HotelListComponent implements OnInit {
 
   public hotels: IHotel[] = [];
+  public hotels$: Observable<IHotel[]> = of([]);
 
   public showBadge: boolean = true;
   public filteredHotels: IHotel[];
+  public filteredHotels$ : Observable<IHotel[]> = of([]);
+  public filterSubject: Subject<string> = new BehaviorSubject<string>('');
   public receivedRating: string;
   _hotelFilter = 'mot';
 
   public errorMsg: string;
+  public errMsgSubject: Subject<string> = new Subject<string>();
+  public errMsg$ = this.errMsgSubject.asObservable();
 
 
   // Methode longue
@@ -26,18 +35,34 @@ export class HotelListComponent implements OnInit {
   // }
 
   // racourci typescript
-  constructor(private hotelListService: HotelListService){}
+  constructor(private hotelListService: HotelListService, private http: HttpClient){}
 
   ngOnInit() {
-    // code for lifecycle hook
-    this.hotelListService.getHotels().subscribe({
-      next: hotels => {
-        this.hotels = hotels;
-        this.filteredHotels = this.hotels;
-      },
-      error: err => this.errorMsg = err
-    });
+
+    const hotelTest$ = of(1,2,3).pipe(
+      map(val => this.http.get<IHotel[]>(`api/hotels/${val}`)),
+    );
+    hotelTest$.subscribe((elem)=>{
+      elem.subscribe((hotel)=>{
+        console.log(hotel);
+      })
+    })
+
+    this.hotels$ = this.hotelListService.hotelsWithAdd$.pipe(
+      catchError((err) => {
+       // this.errorMsg = err;
+       this.errMsgSubject.next(err);
+        //return throwError(err);
+        return EMPTY;
+      })
+    );
+    this.filteredHotels$ = this.createFilterHotels(this.filterSubject, this.hotels$);
     this.hotelFilter = '';
+  }
+
+  public filterChange(value: string):void{
+    console.log("value", value)
+    this.filterSubject.next(value);
   }
 
   public toggleIsNewBadge(): void {
@@ -50,7 +75,16 @@ export class HotelListComponent implements OnInit {
 
   set hotelFilter(filter: string) {
     this._hotelFilter = filter;
-    this.filteredHotels = this.hotelFilter ? this.filterHotels(this.hotelFilter) : this.hotels;
+  }
+
+  public createFilterHotels(filter$: Observable<string>, hotels$: Observable<IHotel[]>): Observable<IHotel[]> {
+    return combineLatest(hotels$, filter$, (hotels: IHotel[], filter: string) => {
+      if(filter === '') return hotels;
+
+      return hotels.filter(
+        (hotel: IHotel) => hotel.hotelName.toLocaleLowerCase().indexOf(filter) !== -1
+      );
+    });
   }
 
   public receiveRatingClick(message: string): void {
@@ -59,10 +93,10 @@ export class HotelListComponent implements OnInit {
   }
 
 
-  private filterHotels(criteria: string): IHotel[] {
+  private filterHotels(criteria: string, hotels: IHotel[]): IHotel[] {
     criteria = criteria.toLocaleLowerCase();
 
-    const res = this.hotels.filter(
+    const res = hotels.filter(
       (hotel: IHotel) => hotel.hotelName.toLocaleLowerCase().indexOf(criteria) !== -1
     );
 

@@ -6,5 +6,7 @@ export interface IHotel {
   imageUrl: string;
   rating: number;
   tags?: string[];
+  categoryId?: number;
+  category?: string;
   // getNewPrice(price: number): number;
 }

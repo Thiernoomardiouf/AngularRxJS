@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 
-import { Observable, throwError, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { Observable, throwError, of, combineLatest, Subject, merge } from 'rxjs';
+import { catchError, map, scan, shareReplay, tap } from 'rxjs/operators';
 
 import { IHotel } from '../models/hotel';
+import { categoty } from '../models/category';
 
 @Injectable({
   providedIn: 'root'
@@ -12,10 +13,50 @@ import { IHotel } from '../models/hotel';
 export class HotelListService {
 
   private readonly HOTEL_API_URL = 'api/hotels'
+
+  public hotelWithCategories$ = combineLatest([
+    this.getHotels(),
+    this.getCategories()
+  ]).pipe(
+    map(([hotels, categories]) => {
+      return hotels.map(hotel => ({
+        ...hotel,
+        price: hotel.price * 1.5,
+        category: categories.find(c => c.id === hotel.categoryId)?.nom
+      }) as IHotel)
+    }
+  ),
+  );
+
+  private hotelInsertedSubject = new Subject<IHotel>();
+  public hotelInserted$ = this.hotelInsertedSubject.asObservable();
+
+  public hotelsWithAdd$ = merge(
+    this.hotelWithCategories$,
+    this.hotelInserted$
+  ).pipe(
+    scan((acc : IHotel[], value: IHotel)=>{
+      const index = acc.findIndex(h => h.id === value.id);
+      if(index !== -1){
+        acc[index] = value;
+        return acc;
+      }
+      return [...acc, value]
+    }),
+    shareReplay(1)
+  )
+
+
   constructor(private http: HttpClient) { }
+
+  public addUpdateHotel(hotel: IHotel) {
+   // hotel = this.transformHotel(hotel);
+    this.hotelInsertedSubject.next(hotel);
+  }
 
   public getHotels(): Observable<IHotel[]> {
     return this.http.get<IHotel[]>(this.HOTEL_API_URL).pipe(
+      tap(hotels => console.log('hotels', hotels)),
       catchError(this.handleHttpError)
     );
   }
@@ -31,11 +72,7 @@ export class HotelListService {
   }
 
   public createHotel(hotel: IHotel): Observable<IHotel> {
-    hotel = {
-      ...hotel,
-      imageUrl: 'assets/img/window.jpg',
-      id: null
-    };
+    hotel = this.transformHotel(hotel);
     return this.http.post<IHotel>(this.HOTEL_API_URL, hotel).pipe(
       catchError(this.handleHttpError)
     )
@@ -57,6 +94,14 @@ export class HotelListService {
     );
   }
 
+  private transformHotel(hotel: IHotel): IHotel {
+    return {
+        ...hotel,
+        imageUrl: 'assets/img/window.jpg',
+        id: null
+      };
+  }
+
   private getDefaultHotel(): IHotel {
     return {
       id: 0,
@@ -66,6 +111,18 @@ export class HotelListService {
       rating: null,
       imageUrl: null
     };
+  }
+
+  public getCategories(): Observable<categoty[]> {
+    return of([
+      { id: 0,
+        nom: 'Motel',
+      },
+      {
+        id: 1,
+        nom: 'Auberge',
+      }
+    ])
   }
 
 
